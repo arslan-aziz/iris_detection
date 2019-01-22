@@ -53,7 +53,8 @@ sd=np.std(im1gray[xv[a,b]:xv[a,b+1], yv[a,b]:yv[a+1,b]])
 x_cen_temp=xv[low[0],low[1]]
 y_cen_temp=yv[low[0],low[1]]
 print(x_cen_temp,y_cen_temp)
-#TODO: use connected components and region thresholding to select ONLY iris
+#create binary iris
+#TODO: use connected components and region thresholding to select ONLY iris (largest component)
 _,mask=cv2.threshold(im1gray,gridAvg.min()+1.96*sd,1,cv2.THRESH_BINARY)
 kernel=cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
 iris_mask=cv2.morphologyEx(mask,cv2.MORPH_OPEN,kernel)
@@ -75,7 +76,7 @@ plt.imshow(iris_mask)
 plt.show()
 
 
-#find iris shape
+#find pupil shape
 #step 1
 diff=np.array([1,-1])
 #row_temp=iris_mask[y_cen_temp-10:y_cen_temp+10,:]
@@ -86,8 +87,8 @@ row_temp_max=np.argwhere(row_temp_diff==1)
 left_temp=row_temp_max[0]
 right_temp=row_temp_max[-1]
 print(left_temp,right_temp)
+fig.add_subplot(1,3,1)
 plt.plot(np.arange(0,row_temp_diff.size),row_temp_diff)
-plt.show()
 #step 2
 y_cen=int((left_temp+right_temp)/2)
 col_temp=iris_mask[:,y_cen]
@@ -96,8 +97,8 @@ col_temp_max=np.argwhere(col_temp_diff==1)
 top_temp=col_temp_max[0]
 bot_temp=col_temp_max[-1]
 print(top_temp,bot_temp)
+fig.add_subplot(1,3,2)
 plt.plot(np.arange(0,col_temp_diff.size),col_temp_diff)
-plt.show()
 #step 3
 x_cen=int((top_temp+bot_temp)/2)
 row_temp=iris_mask[x_cen,:]
@@ -106,6 +107,7 @@ row_temp_max=np.argwhere(row_temp_diff==1)
 left_temp=row_temp_max[0]
 right_temp=row_temp_max[-1]
 print(left_temp,right_temp)
+fig.add_subplot(1,3,3)
 plt.plot(np.arange(0,row_temp_diff.size),row_temp_diff)
 plt.show()
 
@@ -118,6 +120,51 @@ ax=fig.gca()
 circle=plt.Circle((y_cen,x_cen),r,color='blue',fill=False)
 ax.add_artist(circle)
 plt.show()
+
+#segmentation of iris from sclera
+#median filter image
+im1_med=np.float64(cv2.medianBlur(cv2.convertScaleAbs(im1gray),3))
+#draw concentric circles
+#r_test=np.arange(r+1,120,2)
+#theta_test=np.arange(-1*np.pi/4,0,0.05)
+#circle_polar=lambda theta,r: np.array([r*np.cos(theta),r*np.sin(theta)])
+#print(circle_polar(np.pi/4,1))
+
+#check difference across relevant sectors on left and right
+
+#generate circle points
+r=10
+x=r
+y=0
+xPoints=[]
+yPoints=[]
+while x>=y:
+    xPoints.append(x)
+    yPoints.append(y)
+    radius_error=x^2+y^2-r^2
+    if 2*(radius_error+(2*y+1))+(1-2*x)>0:
+        y+=1
+        x-=1
+    else:
+        y+=1
+
+
+
+
+#take laplacian of gaussian of eye
+#im1_gauss=cv2.GaussianBlur(im1gray,(3,3),1)
+#im1_log=cv2.Laplacian(cv2.convertScaleAbs(im1_gauss),cv2.CV_8U,3)
+#fig.add_subplot(1,3,1)
+#plt.imshow(im1_log)
+#threshold zero crossings
+#_,im1_edge=cv2.threshold(im1_log,2,1,cv2.THRESH_BINARY)
+#fig.add_subplot(1,3,2)
+#plt.imshow(im1_edge)
+#_,b=cv2.connectedComponents(im1_edge,4)
+#fig.add_subplot(1,3,3)
+#plt.imshow(b)
+#plt.show()
+
 
 
 
