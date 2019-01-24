@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
+import time
 
 #convert rgb image to grayscale
 def rgb2gray(im_in):
@@ -20,7 +21,7 @@ def grid_stats2(im_in,numGrid):
     for a in range(numGrid):
         for b in range(numGrid):
             grid_avg[a, b] = np.mean(im_in[iv[a, b]:iv[a, b + 1], jv[a, b]:jv[a + 1, b]])
-            grid_std[a, b] = np.sd(im_in[iv[a, b]:iv[a, b + 1], jv[a, b]:jv[a + 1, b]])
+            grid_std[a, b] = np.std(im_in[iv[a, b]:iv[a, b + 1], jv[a, b]:jv[a + 1, b]])
     return grid_avg,grid_std,iv,jv
 
 def get_pupil_mask(im_in,thresh,size):
@@ -29,13 +30,13 @@ def get_pupil_mask(im_in,thresh,size):
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, size)
     #perform CLOSE-OPEN morphological operation to remove gaps
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-    mask = cv2.morphologyEx(pup_mask, cv2.MORPH_CLOSE, kernel)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
     return mask
 
 def get_bounds(vect_in,diff):
     vect_in_diff = np.absolute(np.convolve(diff, vect_in, 'valid'))
     vect_max = np.argwhere(vect_in_diff == 1)
-    return vect_max[0], vect_max[-1]
+    return np.array([vect_max[0],vect_max[-1]])
 
 # estimate pupil radius and position
 def get_pupil_geom(im,fig):
@@ -44,13 +45,13 @@ def get_pupil_geom(im,fig):
     #find subscript, mean and standard deviation of min avg. intensity
     lowest_sub = np.unravel_index(im_grid_mean.argmin(), (grid_size, grid_size))
     lowest_mean = im_grid_mean.min()
-    lowest_sd = im_grid_sd(lowest_sub[0],lowest_sub[1])
+    lowest_sd = im_grid_sd[lowest_sub[0],lowest_sub[1]]
     #guess x_cen and y_cen from min intensity grid
     x_cen_guess = iv[lowest_sub[0],lowest_sub[1]]
     y_cen_guess = jv[lowest_sub[0],lowest_sub[1]]
     #compute threshold for pupil from min intensity grid
     thresh=lowest_mean + 1.96 * lowest_sd
-    pupil_bin = get_pupil_mask(im_gray,thresh,(5,5))
+    pupil_bin = get_pupil_mask(im,thresh,(5,5))
     diff=[1,-1]
     #step 1 find left and right temporary bounds
     vect_temp = pupil_bin[x_cen_guess, :]
@@ -67,8 +68,31 @@ def get_pupil_geom(im,fig):
     
     return x_cen,y_cen,r
 
-def get_iris_geom():
-    pass
+def generate_circle(r=10):
+    n=75
+    angle = np.linspace(np.pi/3,np.pi/2,n)
+    z=np.zeros((2,n))
+    z[0,:]=np.rint(r*np.cos(angle))
+    z[1,:]=np.rint(r*np.sin(angle))
+    z=z.astype(int)
+    z=np.unique(z,axis=1)
+    return z
+
+def get_iris_geom(r_pup,xcen,ycen,im_in,fig):
+    u = 10
+    kernel = np.ones((u, u), np.float32) / (u * u)
+    im_smooth = cv2.filter2D(im_in, -1, kernel)
+    diff = np.zeros((1))
+    for r in range(r_pup + 5, 80):
+        p = generate_circle(r)
+        p[0, :] += xcen
+        p[1, :] += ycen
+        diff = np.append(diff, np.sum(im_smooth[p[1, :], p[0, :]] - im_smooth[p[1, :], p[0, :] + 1]))
+        
+    diffmax = diff[10:diff.size].argmax() + 10
+    # diff2 = np.convolve(diff,[1,-1],'valid')
+    # diff2=diff2[diff.argmax():diff2.size]
+    return diffmax+r_pup
 
 
 
@@ -77,8 +101,26 @@ def main():
     path = 'MMUIrisDatabase/MMU Iris Database/2/left/bryanl1.bmp'
     im = cv2.imread(path)
     im_gray = rgb2gray(im)
-    r,x_pup,y_pup = get_pupil_geom(im_gray,fig=True)
-    get_iris_geom(r,x_pup,y_pup,im_gray,fig=True)
+    x_pup,y_pup,r_pup = get_pupil_geom(im_gray,fig=True)
+    r_pup=int(r_pup)
+    r_iris=get_iris_geom(r_pup, x_pup, y_pup, im_gray, fig=True)
+
+    plt.imshow(im_gray)
+    fig = plt.gcf()
+    ax = fig.gca()
+    circle_pup = plt.Circle((y_pup, x_pup), r_pup, color='blue', fill=False)
+    circle_iris = plt.Circle((y_pup,x_pup), r_iris, color='blue', fill=False)
+    ax.add_artist(circle_pup)
+    ax.add_artist(circle_iris)
+    plt.show()
+
+    # im2 = np.empty_like(im_gray)
+    # im2[:] = im_gray
+    # x=x.astype(int)
+    # y=y.astype(int)
+    # im2[x,y]=0
+    # plt.imshow(im2)
+    # plt.show()
 
 if __name__=='__main__':
     main()
